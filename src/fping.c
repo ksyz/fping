@@ -1633,6 +1633,12 @@ int wait_for_reply(long wait_time)
     FPING_SOCKADDR response_addr;
     struct ip *ip;
     int hlen = 0;
+#ifndef IPV6
+    int h_ToS = 0;
+    int r_ToS = 0;
+    int r_ToS_size = sizeof(r_ToS);
+    getsockopt(s, IPPROTO_IP, IP_TOS, &r_ToS, &r_ToS_size);
+#endif
     FPING_ICMPHDR *icp;
     int n, avg;
     HOST_ENTRY *h;
@@ -1655,6 +1661,11 @@ int wait_for_reply(long wait_time)
 #endif /* DEBUG || _DEBUG */
 
     ip = ( struct ip* )buffer;
+#ifndef IPV6
+    // looks like all semantics are either deprecated or usage specific
+    h_ToS = ip->ip_tos;
+#endif
+
 #ifndef IPV6
 #if defined( __alpha__ ) && __STDC__ && !defined( __GLIBC__ )
     /* The alpha headers are decidedly broken.
@@ -1764,6 +1775,10 @@ int wait_for_reply(long wait_time)
                     fprintf( stderr, "%s : duplicate for [%d], %d bytes, %s ms",
                         h->host, this_count, result, sprint_tm( this_reply ) );
 #ifndef IPV6
+                        fprintf( stderr, ", 0x%02x ToS", h_ToS );
+#endif
+
+#ifndef IPV6
                     if( response_addr.sin_addr.s_addr != h->saddr.sin_addr.s_addr )
                         fprintf( stderr, " [<- %s]", inet_ntoa( response_addr.sin_addr ) );
 #else
@@ -1829,16 +1844,27 @@ int wait_for_reply(long wait_time)
     
         if( h->num_recv <= h->num_sent )
         {
-            printf( "%d%% loss)",
+            printf( "%d%% loss",
                 ( ( h->num_sent - h->num_recv ) * 100 ) / h->num_sent );
 
         }/* IF */
         else
         {
-            printf( "%d%% return)",
+            printf( "%d%% return",
                 ( h->num_recv * 100 ) / h->num_sent );
         
         }/* ELSE */
+#ifndef IPV6
+        printf( ", 0x%02x ToS)", h_ToS);
+#else
+        putc(')');
+#endif
+
+#ifndef IPV6
+        if (h_ToS != 0 && h_ToS != r_ToS)
+            fputs(" [!ToS]", stdout);
+#endif
+
 #ifndef IPV6
         if( response_addr.sin_addr.s_addr != h->saddr.sin_addr.s_addr )
             printf( " [<- %s]", inet_ntoa( response_addr.sin_addr ) );
